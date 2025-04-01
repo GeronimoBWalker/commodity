@@ -76,34 +76,56 @@ class Backtester:
     """Backtester class for testing strategies"""
     def __init__(
             self,
-            initial_capital:float=10000.0,
-            commission_pct:float=0.001,
-            commission_fixed:float=1.0):
+            initial_capital:float=10000.0, 
+            commission_pct:float=0.001,    
+            commission_fixed:float=1.0):   
         
-        self.initial_capital = initial_capital
-        self.commission_pct = commission_pct
-        self.commission_fixed = commission_fixed
-        self.assets_data:Dict={}
-        self.portfolio_history:Dict={}
+        self.initial_capital = initial_capital # initialize investment amount
+        self.commission_pct = commission_pct # initialize commission percentage
+        self.commission_fixed = commission_fixed # initialize baseline commission 
+        self.assets_data:Dict={} 
+        self.portfolio_history:Dict={}  
         self.daily_portfolio_values:List[float] =[]
 
 
     def execute_trade(self, asset:str, signal:int, price:float) -> None:
-        """Execute a trade based on the signal and price"""
+        """
+        Execute a trade based on the signal and price.
+
+        Parameters:
+        asset (str): The name of the asset being traded.
+        signal (int): The trading signal (1 for buy, -1 for sell, 0 for hold).
+        price (float): The current price of the asset.
+
+        This function updates the portfolio by executing buy or sell trades based on the signal.
+        """
+
+        # If the signal is positive (buy) and there is available cash, execute a buy order
         if signal > 0 and self.assets_data[asset]["cash"] > 0:
-            trade_value = self.assets_data[asset]["cash"]
-            commission = self.calculate_commission(trade_value)
-            shares_to_buy = (trade_value - commission) / price
+            trade_value = self.assets_data[asset]["cash"] # Use all available cash for the trade
+            commission = self.calculate_commission(trade_value) # Calculate the commision for the trade
+            shares_to_buy = (trade_value - commission) / price # Determine how many shares can be bought
+            
+            # Update portfolio: increase positions and decrease cash balance
             self.assets_data[asset]['positions'] += shares_to_buy
-            self.assets_data[asset]['cash'] -= trade_value
+            self.assets_data[asset]['cash'] -= trade_value # Deduct full trade value from cash
+
+        # If the signal is negative (sell) and there are shares held, execute a sell order    
         elif signal < 0 and self.assets_data[asset]['positions'] > 0:
-            trade_value = self.assets_data[asset]["positions"] * price
-            commission = self.calculate_commission(trade_value)
+            trade_value = self.assets_data[asset]["positions"] * price # Determine total value of held shares
+            commission = self.calculate_commission(trade_value) # Calculate the commission for the sale
+            
+            # Update portfolio: increase cash and reset positions to zero (fully selling the asset)
             self.assets_data[asset]["cash"] += trade_value - commission
             self.assets_data[asset]["positions"] = 0
+            
 
+    #### #######################################  ####################################### Functions  ####################################### ####
     def calculate_commission(self, trade_value: float) -> float:
         """Calculate the commission fee for a trade."""
+        """
+            Returns the Max of (commmsssion as percentage of the trade and minimum commission) 
+        """
         return max(trade_value * self.commission_pct, self.commission_fixed)
 
     def calculate_total_return(self, final_value: float, initial_value: float) -> float:
@@ -138,11 +160,23 @@ class Backtester:
         cumulative_max = portfolio_values.cummax()
         drawdown = (portfolio_values - cumulative_max) / cumulative_max
         return drawdown.min()
+    ####################################### #######################################  #######################################  #######################################
 
 
     def update_portfolio(self, asset: str, price: float) -> None:
-        """Update the portfolio with the latest price."""
+        """
+        Update the portfolio with the latest asset price.
+
+        Parameters:
+        asset (str): The name of the asset being updated.
+        price (float): The current market price of the asset.
+
+        This function updates the value of held positions and calculates the total portfolio value.
+        """
+        # Calculate the current value of the asset holdings
         self.assets_data[asset]["position_value"] = (self.assets_data[asset]["positions"] * price)
+        
+        # Compute the total portfolio value as the sum of cash and position value
         self.assets_data[asset]["total_value"] = (
             self.assets_data[asset]["cash"] + self.assets_data[asset]["position_value"])
         self.portfolio_history[asset].append(self.assets_data[asset]["total_value"])
