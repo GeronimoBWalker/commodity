@@ -218,16 +218,16 @@ class Backtester:
         portfolio_values = pd.Series(self.daily_portfolio_values)
         daily_returns = portfolio_values.pct_change().dropna()
 
-        total_return = calculate_total_return(
+        total_return = self.calculate_total_return(
             portfolio_values.iloc[-1], self.initial_capital
         )
-        annualized_return = calculate_annualized_return(
+        annualized_return = self.calculate_annualized_return(
             total_return, len(portfolio_values)
         )
-        annualized_volatility = calculate_annualized_volatility(daily_returns)
-        sharpe_ratio = calculate_sharpe_ratio(annualized_return, annualized_volatility)
-        sortino_ratio = calculate_sortino_ratio(daily_returns, annualized_return)
-        max_drawdown = calculate_maximum_drawdown(portfolio_values)
+        annualized_volatility = self.calculate_annualized_volatility(daily_returns)
+        sharpe_ratio = self.calculate_sharpe_ratio(annualized_return, annualized_volatility)
+        sortino_ratio = self.calculate_sortino_ratio(daily_returns, annualized_return)
+        max_drawdown = self.calculate_maximum_drawdown(portfolio_values)
 
         print(f"Final Portfolio Value: {portfolio_values.iloc[-1]:.2f}")
         print(f"Total Return: {total_return * 100:.2f}%")
