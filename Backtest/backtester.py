@@ -86,9 +86,11 @@ class Backtester:
         self.assets_data:Dict={} 
         self.portfolio_history:Dict={}  
         self.daily_portfolio_values:List[float] =[]
+        self.dates: List[pd.Timestamp] = []
+        self.trade_log: Dict[str, List[dict]] = {}
 
 
-    def execute_trade(self, asset:str, signal:int, price:float) -> None:
+    def execute_trade(self, asset:str, signal:int, price:float, date: pd.Timestamp = None) -> None:
         """
         Execute a trade based on the signal and price.
 
@@ -101,23 +103,44 @@ class Backtester:
         """
 
         # If the signal is positive (buy) and there is available cash, execute a buy order
-        if signal > 0 and self.assets_data[asset]["cash"] > 0:
-            trade_value = self.assets_data[asset]["cash"] # Use all available cash for the trade
+        if signal > 0 and self.assets_data[asset]["cash"] > 0 and self.assets_data[asset]["positions"] == 0:
+            trade_value = self.assets_data[asset]["cash"] * 0.10# Use all available cash for the trade
             commission = self.calculate_commission(trade_value) # Calculate the commision for the trade
             shares_to_buy = (trade_value - commission) / price # Determine how many shares can be bought
             
-            # Update portfolio: increase positions and decrease cash balance
-            self.assets_data[asset]['positions'] += shares_to_buy
-            self.assets_data[asset]['cash'] -= trade_value # Deduct full trade value from cash
+            if shares_to_buy > 0:
+                self.assets_data[asset]['positions'] += shares_to_buy
+                self.assets_data[asset]['cash'] -= trade_value
+
+                self.trade_log.setdefault(asset, []).append({
+                    "date": date,
+                    "type": "BUY",
+                    "shares": shares_to_buy,
+                    "price": price,
+                    "value": trade_value,
+                    "commission": commission,
+                    "cash_remaining": self.assets_data[asset]['cash'],
+                })
 
         # If the signal is negative (sell) and there are shares held, execute a sell order    
         elif signal < 0 and self.assets_data[asset]['positions'] > 0:
+            shares_to_sell = self.assets_data[asset]["positions"]
             trade_value = self.assets_data[asset]["positions"] * price # Determine total value of held shares
             commission = self.calculate_commission(trade_value) # Calculate the commission for the sale
             
             # Update portfolio: increase cash and reset positions to zero (fully selling the asset)
             self.assets_data[asset]["cash"] += trade_value - commission
             self.assets_data[asset]["positions"] = 0
+
+            self.trade_log.setdefault(asset, []).append({
+            "date": date,
+            "type": "SELL",
+            "shares": shares_to_sell,
+            "price": price,
+            "value": trade_value,
+            "commission": commission,
+            "cash_remaining": self.assets_data[asset]['cash'],
+        })
             
 
     #### #######################################  ####################################### Functions  ####################################### ####
@@ -196,17 +219,36 @@ class Backtester:
             }
             self.portfolio_history[asset] = []
 
-            for date, row in data[asset].iterrows():
-                self.execute_trade(asset, row["signal"], row["close"])
-                self.update_portfolio(asset, row["close"])
-                if len(self.daily_portfolio_values) < len(data[asset]):
-                    self.daily_portfolio_values.append(
-                        self.assets_data[asset]["total_value"]
-                    )
-                else:
-                    self.daily_portfolio_values[
-                        len(self.portfolio_history[asset]) - 1
-                    ] += self.assets_data[asset]["total_value"]
+            # first_col = data[asset].columns[0]
+
+            # for date, row in data[asset].iterrows():
+            #     price = row[first_col]
+            #     self.execute_trade(asset, row["signal"], price, date=date)
+            #     self.update_portfolio(asset, price)
+                
+            #     if len(self.daily_portfolio_values) < len(data[asset]):
+            #         self.daily_portfolio_values.append(self.assets_data[asset]["total_value"])
+            #         self.dates.append(date)
+            #     else:
+            #         self.daily_portfolio_values[
+            #             len(self.portfolio_history[asset]) - 1
+            #         ] += self.assets_data[asset]["total_value"]
+
+            dates = data[next(iter(data))].index
+            for i, date in enumerate(dates):
+                total_portfolio_value = 0
+
+                for asset, df in data.items():
+                    row = df.iloc[i]
+                    price = row[df.columns[0]]
+                    signal = row["signal"]
+
+                    self.execute_trade(asset, signal, price, date)
+                    self.update_portfolio(asset, price)
+                    total_portfolio_value += self.assets_data[asset]["total_value"]
+
+                self.daily_portfolio_values.append(total_portfolio_value)
+                self.dates.append(date)
     
 
     def calculate_performance(self, plot: bool = True) -> None:
@@ -215,7 +257,7 @@ class Backtester:
             print("No portfolio history to calculate performance.")
             return
 
-        portfolio_values = pd.Series(self.daily_portfolio_values)
+        portfolio_values = pd.Series(self.daily_portfolio_values,index=self.dates)
         daily_returns = portfolio_values.pct_change().dropna()
 
         total_return = self.calculate_total_return(
@@ -242,17 +284,17 @@ class Backtester:
 
     def plot_performance(self, portfolio_values:Dict, daily_returns:pd.DataFrame):
         """Plot the performance of the trading strategy."""
-        plt.figure(figsize=(10, 6))
+        fig,axs = plt.subplots(2,1,figsize=(10, 6))
 
-        plt.subplot(2, 1, 1)
-        plt.plot(portfolio_values, label="Portfolio Value")
-        plt.title("Portfolio Value Over Time")
-        plt.legend()
+        
+        axs[0].plot(portfolio_values, label="Portfolio Value")
+        axs[0].set_title("Portfolio Value Over Time")
+        axs[0].legend()
 
-        plt.subplot(2, 1, 2)
-        plt.plot(daily_returns, label="Daily Returns", color="orange")
-        plt.title("Daily Returns Over Time")
-        plt.legend()
+        
+        axs[1].plot(daily_returns, label="Daily Returns", color="orange")
+        axs[1].set_title("Daily Returns Over Time")
+        axs[1].legend()
 
         plt.tight_layout()
         plt.show()
