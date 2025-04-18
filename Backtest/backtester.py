@@ -104,7 +104,7 @@ class Backtester:
 
         # If the signal is positive (buy) and there is available cash, execute a buy order
         if signal > 0 and self.assets_data[asset]["cash"] > 0 and self.assets_data[asset]["positions"] == 0:
-            trade_value = self.assets_data[asset]["cash"] * 0.10# Use all available cash for the trade
+            trade_value = self.assets_data[asset]["cash"] #* 0.10 # Use 10% of available cash for the trade
             commission = self.calculate_commission(trade_value) # Calculate the commision for the trade
             shares_to_buy = (trade_value - commission) / price # Determine how many shares can be bought
             
@@ -141,8 +141,65 @@ class Backtester:
             "commission": commission,
             "cash_remaining": self.assets_data[asset]['cash'],
         })
-            
 
+    def update_portfolio(self, pair:str, price:float) -> None:
+        """
+        Update the portfolio with the latest pair price.
+
+        Parameters:
+        asset (str): The name of the pair being updated.
+        price (float): The current market price of the asset.
+
+        This function updates the value of held positions and calculates the total portfolio value.
+        """
+
+        # Calculate the current value of the asset holdings
+        self.assets_data[pair]["position_value"] = (self.assets_data[pair]["positions"] * price)
+        
+        # Compute the total portfolio value as the sum of cash and position value
+        self.assets_data[pair]["total_value"] = (self.assets_data[pair]["cash"] + self.assets_data[pair]["position_value"])
+        self.portfolio_history[pair].append(self.assets_data[pair]["total_value"])
+
+
+    def backtest(self, data: pd.DataFrame | dict[str, pd.DataFrame]):
+        """
+        Backtest the trading strategy using the provided data.
+
+        Parameters:
+        data (pd.DataFrame): A combined DataFrame with multiple asset pairs, each row containing:
+                         - a 'pair' column (e.g., "PA=F_lag_1_AAPL")
+                         - a 'signal' column
+                         - a price column (e.g., 'stock_price')
+                         - and indexed by date
+        """
+        unique_pairs = data['pair'].unique() # grabs all unique pairs from data
+
+        for pair in unique_pairs: # iterates through each unique pair
+            self.assets_data[pair] = {
+                "cash": self.initial_capital / len(unique_pairs), # divides capital evenly among pairs
+                "positions": 0,     # no positions at the beginning
+                "position_value": 0,# no value yield yet
+                "total_value": 0,   # Total portfolio value will be cash initially
+            }
+            self.portfolio_history[pair] = []
+
+        grouped = data.groupby(data.index)
+
+        for date, group in grouped:
+            total_portfolio_value = 0
+
+            for _, row in group.iterrows():
+                pair = row['pair']
+                price = row['price']
+                signal = row["signal"]
+
+                self.execute_trade(pair, signal, price, date)
+                self.update_portfolio(pair, price)
+                total_portfolio_value += self.assets_data[pair]["total_value"]
+
+            self.daily_portfolio_values.append(total_portfolio_value)
+            self.dates.append(date)
+    
     #### #######################################  ####################################### Functions  ####################################### ####
     def calculate_commission(self, trade_value: float) -> float:
         """Calculate the commission fee for a trade."""
@@ -183,74 +240,8 @@ class Backtester:
         cumulative_max = portfolio_values.cummax()
         drawdown = (portfolio_values - cumulative_max) / cumulative_max
         return drawdown.min()
-    ####################################### #######################################  #######################################  #######################################
-
-
-    def update_portfolio(self, asset: str, price: float) -> None:
-        """
-        Update the portfolio with the latest asset price.
-
-        Parameters:
-        asset (str): The name of the asset being updated.
-        price (float): The current market price of the asset.
-
-        This function updates the value of held positions and calculates the total portfolio value.
-        """
-        # Calculate the current value of the asset holdings
-        self.assets_data[asset]["position_value"] = (self.assets_data[asset]["positions"] * price)
-        
-        # Compute the total portfolio value as the sum of cash and position value
-        self.assets_data[asset]["total_value"] = (
-            self.assets_data[asset]["cash"] + self.assets_data[asset]["position_value"])
-        self.portfolio_history[asset].append(self.assets_data[asset]["total_value"])
-
-
-    def backtest(self, data: pd.DataFrame | dict[str, pd.DataFrame]):
-        """Backtest the trading strategy using the provided data."""
-        if isinstance(data, pd.DataFrame):  # Single asset
-            data = {"SINGLE_ASSET": data}  # Convert to dict format for unified processing
-
-        for asset in data:
-            self.assets_data[asset] = {
-                "cash": self.initial_capital / len(data),
-                "positions": 0,
-                "position_value": 0,
-                "total_value": 0,
-            }
-            self.portfolio_history[asset] = []
-
-            # first_col = data[asset].columns[0]
-
-            # for date, row in data[asset].iterrows():
-            #     price = row[first_col]
-            #     self.execute_trade(asset, row["signal"], price, date=date)
-            #     self.update_portfolio(asset, price)
-                
-            #     if len(self.daily_portfolio_values) < len(data[asset]):
-            #         self.daily_portfolio_values.append(self.assets_data[asset]["total_value"])
-            #         self.dates.append(date)
-            #     else:
-            #         self.daily_portfolio_values[
-            #             len(self.portfolio_history[asset]) - 1
-            #         ] += self.assets_data[asset]["total_value"]
-
-            dates = data[next(iter(data))].index
-            for i, date in enumerate(dates):
-                total_portfolio_value = 0
-
-                for asset, df in data.items():
-                    row = df.iloc[i]
-                    price = row[df.columns[0]]
-                    signal = row["signal"]
-
-                    self.execute_trade(asset, signal, price, date)
-                    self.update_portfolio(asset, price)
-                    total_portfolio_value += self.assets_data[asset]["total_value"]
-
-                self.daily_portfolio_values.append(total_portfolio_value)
-                self.dates.append(date)
     
-
+    ####################################### #######################################  #######################################  #######################################
     def calculate_performance(self, plot: bool = True) -> None:
         """Calculate the performance of the trading strategy."""
         if not self.daily_portfolio_values:
@@ -260,12 +251,8 @@ class Backtester:
         portfolio_values = pd.Series(self.daily_portfolio_values,index=self.dates)
         daily_returns = portfolio_values.pct_change().dropna()
 
-        total_return = self.calculate_total_return(
-            portfolio_values.iloc[-1], self.initial_capital
-        )
-        annualized_return = self.calculate_annualized_return(
-            total_return, len(portfolio_values)
-        )
+        total_return = self.calculate_total_return(portfolio_values.iloc[-1], self.initial_capital)
+        annualized_return = self.calculate_annualized_return(total_return, len(portfolio_values))
         annualized_volatility = self.calculate_annualized_volatility(daily_returns)
         sharpe_ratio = self.calculate_sharpe_ratio(annualized_return, annualized_volatility)
         sortino_ratio = self.calculate_sortino_ratio(daily_returns, annualized_return)
