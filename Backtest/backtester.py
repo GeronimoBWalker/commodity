@@ -77,8 +77,9 @@ class Backtester:
     def __init__(
             self,
             initial_capital:float=10000.0, 
-            commission_pct:float=0.001,    
-            commission_fixed:float=1.0):   
+            commission_pct:float=0.005,    
+            commission_fixed:float=1.0,
+            trade_fraction: float = 0.1):   
         
         self.initial_capital = initial_capital # initialize investment amount
         self.commission_pct = commission_pct # initialize commission percentage
@@ -104,7 +105,10 @@ class Backtester:
 
         # If the signal is positive (buy) and there is available cash, execute a buy order
         if signal > 0 and self.assets_data[asset]["cash"] > 0 and self.assets_data[asset]["positions"] == 0:
-            trade_value = self.assets_data[asset]["cash"] #* 0.10 # Use 10% of available cash for the trade
+            total_value = self.assets_data[asset]["cash"] + self.assets_data[asset]["position_value"]
+            trade_value = total_value * self.trade_fraction
+# Ensure you don't trade more than available cash
+            trade_value = min(trade_value, self.assets_data[asset]["cash"]) #* 0.10 # Use 10% of available cash for the trade
             commission = self.calculate_commission(trade_value) # Calculate the commision for the trade
             shares_to_buy = (trade_value - commission) / price # Determine how many shares can be bought
             
