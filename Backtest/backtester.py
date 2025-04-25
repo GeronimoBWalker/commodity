@@ -79,7 +79,7 @@ class Backtester:
             initial_capital:float=10000.0, 
             commission_pct:float=0.005,    
             commission_fixed:float=1.0,
-            trade_fraction: float = 0.1):   
+            trade_fraction: float = 0.3):   
         
         self.initial_capital = initial_capital # initialize investment amount
         self.commission_pct = commission_pct # initialize commission percentage
