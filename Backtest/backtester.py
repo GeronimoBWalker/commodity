@@ -91,27 +91,17 @@ class Backtester:
         self.trade_log: Dict[str, List[dict]] = {}
 
 
-    def execute_trade(self, asset:str, signal:int, price:float, date: pd.Timestamp = None) -> None:
-        """
-        Execute a trade based on the signal and price.
-
-        Parameters:
-        asset (str): The name of the asset being traded.
-        signal (int): The trading signal (1 for buy, -1 for sell, 0 for hold).
-        price (float): The current price of the asset.
-
-        This function updates the portfolio by executing buy or sell trades based on the signal.
-        """
-
-        # If the signal is positive (buy) and there is available cash, execute a buy order
-        if signal > 0 and self.assets_data[asset]["cash"] > 0 and self.assets_data[asset]["positions"] == 0:
-            total_value = self.assets_data[asset]["cash"] + self.assets_data[asset]["position_value"]
-            trade_value = total_value * self.trade_fraction
-# Ensure you don't trade more than available cash
-            trade_value = min(trade_value, self.assets_data[asset]["cash"]) #* 0.10 # Use 10% of available cash for the trade
-            commission = self.calculate_commission(trade_value) # Calculate the commision for the trade
-            shares_to_buy = (trade_value - commission) / price # Determine how many shares can be bought
+     def execute_trade(self, asset: str, signal: int, price: float, date: pd.Timestamp = None, per_trade_value: float = None) -> None:
+        if signal > 0 and self.assets_data[asset]["positions"] == 0:
             
+            trade_value = per_trade_value if per_trade_value is not None else (
+                self.assets_data[asset]["cash"] + self.assets_data[asset]["position_value"]
+            ) * self.trade_fraction
+
+            trade_value = min(trade_value, self.assets_data[asset]["cash"])
+            commission = self.calculate_commission(trade_value)
+            shares_to_buy = (trade_value - commission) / price
+
             if shares_to_buy > 0:
                 self.assets_data[asset]['positions'] += shares_to_buy
                 self.assets_data[asset]['cash'] -= trade_value
@@ -126,25 +116,23 @@ class Backtester:
                     "cash_remaining": self.assets_data[asset]['cash'],
                 })
 
-        # If the signal is negative (sell) and there are shares held, execute a sell order    
         elif signal < 0 and self.assets_data[asset]['positions'] > 0:
             shares_to_sell = self.assets_data[asset]["positions"]
-            trade_value = self.assets_data[asset]["positions"] * price # Determine total value of held shares
-            commission = self.calculate_commission(trade_value) # Calculate the commission for the sale
-            
-            # Update portfolio: increase cash and reset positions to zero (fully selling the asset)
+            trade_value = shares_to_sell * price
+            commission = self.calculate_commission(trade_value)
+
             self.assets_data[asset]["cash"] += trade_value - commission
             self.assets_data[asset]["positions"] = 0
 
             self.trade_log.setdefault(asset, []).append({
-            "date": date,
-            "type": "SELL",
-            "shares": shares_to_sell,
-            "price": price,
-            "value": trade_value,
-            "commission": commission,
-            "cash_remaining": self.assets_data[asset]['cash'],
-        })
+                "date": date,
+                "type": "SELL",
+                "shares": shares_to_sell,
+                "price": price,
+                "value": trade_value,
+                "commission": commission,
+                "cash_remaining": self.assets_data[asset]['cash'],
+            })
 
     def update_portfolio(self, pair:str, price:float) -> None:
         """
@@ -159,8 +147,6 @@ class Backtester:
 
         # Calculate the current value of the asset holdings
         self.assets_data[pair]["position_value"] = (self.assets_data[pair]["positions"] * price)
-        
-        # Compute the total portfolio value as the sum of cash and position value
         self.assets_data[pair]["total_value"] = (self.assets_data[pair]["cash"] + self.assets_data[pair]["position_value"])
         self.portfolio_history[pair].append(self.assets_data[pair]["total_value"])
 
@@ -176,14 +162,13 @@ class Backtester:
                          - a price column (e.g., 'stock_price')
                          - and indexed by date
         """
-        unique_pairs = data['pair'].unique() # grabs all unique pairs from data
-
-        for pair in unique_pairs: # iterates through each unique pair
+        unique_pairs = data['pair'].unique()
+        for pair in unique_pairs:
             self.assets_data[pair] = {
-                "cash": self.initial_capital / len(unique_pairs), # divides capital evenly among pairs
-                "positions": 0,     # no positions at the beginning
-                "position_value": 0,# no value yield yet
-                "total_value": 0,   # Total portfolio value will be cash initially
+                "cash": self.initial_capital / len(unique_pairs),
+                "positions": 0,
+                "position_value": 0,
+                "total_value": 0,
             }
             self.portfolio_history[pair] = []
 
@@ -192,13 +177,27 @@ class Backtester:
         for date, group in grouped:
             total_portfolio_value = 0
 
+            # Determine which buy signals are valid (no open position)
+            eligible_buys = group[
+                (group['signal'] > 0) & (group['pair'].apply(lambda p: self.assets_data[p]['positions'] == 0))
+            ]
+
+            top_signals = eligible_buys.head(20)  # max 20 positions per day
+            num_trades = len(top_signals)
+
             for _, row in group.iterrows():
                 pair = row['pair']
                 price = row['price']
-                signal = row["signal"]
+                signal = row['signal']
 
-                self.execute_trade(pair, signal, price, date)
-                self.update_portfolio(pair, price)
+                # Calculate how much to allocate per trade (split across valid buys)
+                if signal > 0 and pair in top_signals['pair'].values and num_trades > 0:
+                    total_value = self.assets_data[pair]["cash"] + self.assets_data[pair]["position_value"]
+                    per_trade_value = total_value * self.trade_fraction / num_trades
+                    self.execute_trade(pair, signal, price, date, per_trade_value=per_trade_value)
+                elif signal < 0:
+                    self.execute_trade(pair, signal, price, date)
+                    
                 total_portfolio_value += self.assets_data[pair]["total_value"]
 
             self.daily_portfolio_values.append(total_portfolio_value)
