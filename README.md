@@ -1,4 +1,4 @@
-# 📈 Correlation-Based Commodity Trading Strategy
+# 📈 Correlation-Based Commodity Trading Strategy **In Progress**
 
 Can we profit off of fluctuations in key commodity prices?
 
