@@ -83,6 +83,7 @@ class Backtester:
         self.initial_capital = initial_capital # initialize investment amount
         self.commission_pct = commission_pct # initialize commission percentage
         self.commission_fixed = commission_fixed # initialize baseline commission 
+        
         self.assets_data:Dict={} 
         self.portfolio_history:Dict={}  
         self.daily_portfolio_values:List[float] =[]
