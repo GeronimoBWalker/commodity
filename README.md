@@ -69,12 +69,12 @@ Commodities like silver, oil, and wheat often lead broader market movements — 
 
 ## 📁 Project Structure
 
-├── data/ # Commodity and stock price CSVs
-├── notebooks/ # Exploratory notebooks
-├── signals/ # Signal logic
-├── backtesting/ # Simulated trades and performance metrics
-├── visualizations/ # Plotly chart functions
-└── README.md
+─ data/ # Commodity and stock price CSVs
+─ notebooks/ # Exploratory notebook
+─ signals/ # Signal logic
+─ backtesting/ # Simulated trades and performance metrics
+─ visualizations/ # Plotly chart functions
+─ README.md
 
 
 ## 📬 Contact
