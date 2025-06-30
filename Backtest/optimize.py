@@ -1,6 +1,6 @@
 # optimize.py
 from signals import compute_features, detect_trade_signals
-from backtester import Backtester
+from optimizer_backtester import OpBacktester
 import numpy as np
 import pandas as pd
 
@@ -12,7 +12,7 @@ def optimize(commodity, stock, param_grid):
             for quantile in param_grid['quantile']:
                 features = compute_features(commodity, stock)
                 signals = detect_trade_signals(features, threshold, min_streak, quantile)
-                bt = Backtester(features, signals, stock.name)
+                bt = OpBacktester(features, signals, stock.name)
                 results_df = bt.run()
 
                 final_return = results_df['cumulative'].iloc[-1]
