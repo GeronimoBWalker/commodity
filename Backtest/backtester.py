@@ -39,7 +39,4 @@ class Backtester:
         df['buyhold_value'] = self.starting_capital * df['buyhold_cum']
         df['strategy_value'] = self.starting_capital * df['strategy_cum']
 
-        print(np.isfinite(df['daily_return']).all())
-        print(np.isfinite(df['strategy_return']).all())
-
         return df
