@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import linregress
 
-def compute_features(commodity, stock, lag=1):
+def compute_features(commodity, stock, window=14, lag=1):
     commodity = commodity.where(commodity > 0).dropna()
     stock = stock.where(stock > 0).dropna()
 
@@ -16,7 +16,7 @@ def compute_features(commodity, stock, lag=1):
     df = pd.concat([commodity_returns, stock_returns], axis=1).dropna()
     df.columns = [commodity_name, stock_name]
 
-    df['rolling_corr'] = df[commodity_name].rolling(window=21).corr(df[stock_name])
+    df['rolling_corr'] = df[commodity_name].rolling(window=window).corr(df[stock_name])
     df['gradient'] = df[commodity_name].rolling(window=3).apply(
         lambda x: linregress(range(3), x).slope, raw=True
     )

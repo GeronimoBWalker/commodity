@@ -11,18 +11,20 @@ def optimize(commodity, stock, param_grid):
         for min_streak in param_grid['streak']:
             for quantile in param_grid['quantile']:
                 for lag in param_grid['lag']:
-                    features = compute_features(commodity, stock, lag)
-                    signals = detect_trade_signals(features, threshold, min_streak, quantile)
-                    bt = OpBacktester(features, signals, stock.name)
-                    results_df = bt.run()
+                    for window in param_grid['window']:
+                        features = compute_features(commodity, stock, window, lag)
+                        signals = detect_trade_signals(features, threshold, min_streak, quantile)
+                        bt = OpBacktester(features, signals, stock.name)
+                        results_df = bt.run()
 
-                    final_return = results_df['cumulative'].iloc[-1]
-                    results.append({
-                        'threshold': threshold,
-                        'streak': min_streak,
-                        'quantile': quantile,
-                        'final_return': final_return,
-                        'lag': lag
-                    })
+                        final_return = results_df['cumulative'].iloc[-1]
+                        results.append({
+                            'threshold': threshold,
+                            'streak': min_streak,
+                            'quantile': quantile,
+                            'final_return': final_return,
+                            'lag': lag,
+                            'window': window
+                        })
 
     return pd.DataFrame(results).sort_values(by='final_return', ascending=False)
